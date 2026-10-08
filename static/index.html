@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkillSense AI - ATS Analyzer</title>
+    <style>
+        body { font-family: -apple-system, system-ui, sans-serif; background: #f4f7f6; padding: 2rem; color: #333; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; text-align: center; }
+        .form-group { margin-bottom: 1.5rem; }
+        label { font-weight: bold; display: block; margin-bottom: 0.5rem; }
+        input[type="file"], textarea { width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 1rem; background: #2563eb; color: white; border: none; border-radius: 4px; font-size: 1.1rem; cursor: pointer; }
+        button:hover { background: #1d4ed8; }
+        .badge { display: inline-block; padding: 0.25rem 0.75rem; margin: 0.25rem; border-radius: 999px; font-size: 0.875rem; font-weight: bold; }
+        .matched { background: #d1fae5; color: #065f46; }
+        .missing { background: #fee2e2; color: #991b1b; }
+        .results-card { margin-top: 2rem; padding: 1.5rem; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; display: none; }
+        .loader { display: none; text-align: center; margin-top: 1rem; font-weight: bold; color: #2563eb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SkillSense AI Analyzer</h1>
+        
+        <form id="uploadForm">
+            <div class="form-group">
+                <label>1. Upload Resume (PDF) *</label>
+                <input type="file" id="resume" accept=".pdf" required>
+            </div>
+            
+            <div class="form-group">
+                <label>2. Job Description (Choose ONE)</label>
+                <textarea id="jdText" rows="4" placeholder="Paste JD text here..."></textarea>
+                <p style="text-align: center; margin: 0.5rem 0; font-weight: bold;">OR</p>
+                <input type="file" id="jdPdf" accept=".pdf">
+            </div>
+            
+            <button type="submit">Run ATS Pipeline</button>
+        </form>
+        
+        <div class="loader" id="loader">Running Lexical, Semantic, and LLM Analysis... Please wait.</div>
+        
+        <div class="results-card" id="results">
+            <h2>Analysis Results</h2>
+            <p><strong>Deterministic Score:</strong> <span id="atsScore"></span></p>
+            
+            <h3>Matched Core Skills</h3>
+            <div id="matchedSkills"></div>
+            
+            <h3>Missing Core Skills</h3>
+            <div id="missingSkills"></div>
+            
+            <h3>Strategic Advice</h3>
+            <p id="advice" style="font-style: italic;"></p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const resumeFile = document.getElementById('resume').files[0];
+            const jdText = document.getElementById('jdText').value;
+            const jdPdf = document.getElementById('jdPdf').files[0];
+            
+            if (!jdText && !jdPdf) {
+                alert("Please provide either a Job Description text or PDF.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("resume", resumeFile);
+            if (jdText) formData.append("jd_text", jdText);
+            if (jdPdf) formData.append("jd_pdf", jdPdf);
+
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+
+            try {
+                const response = await fetch('/api/v1/analyze', { method: 'POST', body: formData });
+                const data = await response.json();
+                
+                if (!response.ok) throw new Error(data.detail || "Analysis failed");
+
+                // Populate UI
+                document.getElementById('atsScore').innerText = data.deterministic_summary[0].Value;
+                document.getElementById('advice').innerText = data.semantic_gap_analysis.feedback;
+                
+                document.getElementById('matchedSkills').innerHTML = data.semantic_gap_analysis.matched_skills
+                    .map(skill => `<span class="badge matched">✓ ${skill}</span>`).join('');
+                    
+                document.getElementById('missingSkills').innerHTML = data.semantic_gap_analysis.missing_skills
+                    .map(skill => `<span class="badge missing">✗ ${skill}</span>`).join('');
+
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('results').style.display = 'block';
+            } catch (error) {
+                alert("Error: " + error.message);
+                document.getElementById('loader').style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
